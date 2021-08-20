@@ -288,7 +288,8 @@ bool EglGbmBackend::resetFramebuffer(Output &output)
 {
     cleanupFramebuffer(output);
 
-    if (output.output->hardwareTransforms()) {
+    // Always use an intermediate for postprocessing (for now)
+    if (false && output.output->hardwareTransforms()) {
         // No need for an extra render target.
         return true;
     }
@@ -304,8 +305,8 @@ bool EglGbmBackend::resetFramebuffer(Output &output)
 
     const QSize texSize = output.output->viewGeometry().size();
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texSize.width(), texSize.height(),
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, texSize.width(), texSize.height(),
+                 0, GL_RGBA, GL_HALF_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -313,6 +314,8 @@ bool EglGbmBackend::resetFramebuffer(Output &output)
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                            output.render.texture, 0);
+
+    qDebug() << "Framebuffer created";
 
     if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         qCWarning(KWIN_DRM) << "Error: framebuffer not complete";
@@ -335,7 +338,7 @@ void EglGbmBackend::initRenderTarget(Output &output)
     output.render.vbo = vbo;
 }
 
-void EglGbmBackend::renderFramebufferToSurface(Output &output)
+void EglGbmBackend::renderFramebufferToSurface(Output& output)
 {
     if (!output.render.framebuffer) {
         // No additional render target.
@@ -352,7 +355,8 @@ void EglGbmBackend::renderFramebufferToSurface(Output &output)
     }
     glViewport(0, 0, size.width(), size.height());
 
-    auto shader = ShaderManager::instance()->pushShader(ShaderTrait::MapTexture);
+    auto shader
+        = ShaderManager::instance()->pushShader(ShaderTrait::MapTexture | ShaderTrait::Dither);
 
     QMatrix4x4 rotationMatrix;
     rotationMatrix.rotate(output.output->rotation(), 0, 0, 1);
@@ -498,7 +502,7 @@ QRegion EglGbmBackend::prepareRenderingForScreen(AbstractOutput* output)
         // know the status of the back buffer we render to.
         return output->geometry();
     }
-    if (!out.output->hardwareTransforms()) {
+    if (true || !out.output->hardwareTransforms()) {
         // If we render to the extra frame buffer, do not use buffer age. It leads to artifacts.
         // TODO(romangg): Can we make use of buffer age even in this case somehow?
         return output->geometry();

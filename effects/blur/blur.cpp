@@ -149,6 +149,8 @@ void BlurEffect::updateTexture()
         }
     }
 
+    textureFormat = GL_RGBA16F;
+
     for (int i = 0; i <= m_downSampleIterations; i++) {
         m_renderTextures.append(GLTexture(textureFormat, effects->virtualScreenSize() / (1 << i)));
         m_renderTextures.last().setFilter(GL_LINEAR);

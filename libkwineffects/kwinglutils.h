@@ -188,6 +188,7 @@ enum class ShaderTrait {
     Modulate         = (1 << 2),
     AdjustSaturation = (1 << 3),
     ClampTexture     = (1 << 4),
+    Dither           = (1 << 5),
 };
 
 Q_DECLARE_FLAGS(ShaderTraits, ShaderTrait)

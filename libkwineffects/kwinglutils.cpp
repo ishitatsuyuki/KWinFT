@@ -861,6 +861,41 @@ QByteArray ShaderManager::generateFragmentSource(ShaderTraits traits) const
             stream << "uniform vec4 modulation;\n";
         if (traits & ShaderTrait::AdjustSaturation)
             stream << "uniform float saturation;\n";
+        if (traits & ShaderTrait::Dither)
+            stream << "vec3 oetf(vec3 rgb) {\n"
+                      "    return rgb;"
+                      "    bvec3 cutoff = greaterThanEqual(rgb, vec3(0.0031308));\n"
+                      "    vec3 below = vec3(12.92)*rgb;\n"
+                      "    vec3 above = vec3(1.055)*pow(rgb, vec3(0.41666)) - vec3(0.055);\n"
+                      "    return mix(below, above, cutoff);\n"
+                      "}\n"
+                      "\n"
+                      "vec3 eotf(vec3 srgb) {\n"
+                      "    return srgb;"
+                      "    // Formula from EXT_sRGB.\n"
+                      "    bvec3 cutoff = greaterThanEqual(srgb, vec3(0.04045));\n"
+                      "    vec3 below = srgb/vec3(12.92);\n"
+                      "    vec3 above = pow((srgb + vec3(0.055))/vec3(1.055), vec3(2.4));\n"
+                      "    return mix(below, above, cutoff);\n"
+                      "}\n"
+                      "\n"
+                      "vec3 dither(vec3 linear_color, float noise, float quant) {\n"
+                      "    vec3 c0 = floor(oetf(linear_color) / quant) * quant;\n"
+                      "    vec3 c1 = c0 + quant;\n"
+                      "    vec3 discr = mix(eotf(c0), eotf(c1), noise);\n"
+                      "    return mix(c0, c1, lessThan(discr, linear_color));\n"
+                      "}\n"
+                      "\n"
+                      "float FsrTepdDitF(ivec2 p, int f) {\n"
+                      "    float x = float(p.x + f);\n"
+                      "    float y = float(p.y);\n"
+                      "    // The 1.61803 golden ratio.\n"
+                      "    float a = (1.0 + sqrt(5.0)) / 2.0;\n"
+                      "    // Number designed to provide a good visual pattern.\n"
+                      "    float b = 1.0 / 3.69;\n"
+                      "    x = x * a + (y * b);\n"
+                      "    return fract(x);\n"
+                      "}";
 
         stream << "\n" << varying << " vec2 texcoord0;\n";
 
@@ -883,12 +918,14 @@ QByteArray ShaderManager::generateFragmentSource(ShaderTraits traits) const
             stream << "texcoordC.y = clamp(texcoordC.y, textureClamp.y, textureClamp.w);\n";
         }
 
-        if (traits & (ShaderTrait::Modulate | ShaderTrait::AdjustSaturation)) {
+        if (traits & (ShaderTrait::Modulate | ShaderTrait::AdjustSaturation | ShaderTrait::Dither)) {
             stream << "    vec4 texel = " << textureLookup << "(sampler, texcoordC);\n";
             if (traits & ShaderTrait::Modulate)
                 stream << "    texel *= modulation;\n";
             if (traits & ShaderTrait::AdjustSaturation)
                 stream << "    texel.rgb = mix(vec3(dot(texel.rgb, vec3(0.2126, 0.7152, 0.0722))), texel.rgb, saturation);\n";
+            if (traits & ShaderTrait::Dither)
+                 stream << "    texel.rgb = eotf(dither(texel.rgb, FsrTepdDitF(ivec2(gl_FragCoord.xy), 1), 1.0 / 255.0));\n";
 
             stream << "    " << output << " = texel;\n";
         } else {
